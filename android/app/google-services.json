@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "166779339384",
+    "project_id": "fixar-76ef6",
+    "storage_bucket": "fixar-76ef6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:166779339384:android:f5ee15a3ea9d395c5a238d",
+        "android_client_info": {
+          "package_name": "com.example.fix_ar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdC50KD2SMv9ss_dHsA_Yv1vCoyp8HwI8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

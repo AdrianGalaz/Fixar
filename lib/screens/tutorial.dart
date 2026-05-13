@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TutorialExecutionScreen extends StatefulWidget {
-  const TutorialExecutionScreen({super.key});
+  final String? tutorialId;
+  const TutorialExecutionScreen({super.key, this.tutorialId});
 
   @override
   State<TutorialExecutionScreen> createState() =>
@@ -9,78 +11,79 @@ class TutorialExecutionScreen extends StatefulWidget {
 }
 
 class _TutorialExecutionScreenState extends State<TutorialExecutionScreen> {
-  // Simulamos los pasos del tutorial
-  int _pasoActual = 1;
-  final int _totalPasos = 5;
+  int _pasoActualIndex = 0;
+  List<dynamic> _pasosCargados = [];
+  bool _cargando = true;
+  String _tituloTutorial = "";
 
-  void _siguientePaso() {
-    if (_pasoActual < _totalPasos) {
-      setState(() {
-        _pasoActual++;
-      });
-    } else {
-      // Si es el último paso, mostramos un mensaje de éxito
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('¡Tutorial Completado!')));
-      Navigator.popUntil(
-        context,
-        (route) => route.isFirst,
-      ); // Regresa al inicio
-    }
+  @override
+  void initState() {
+    super.initState();
+    _cargarDatosTutorial();
   }
 
-  void _pasoAnterior() {
-    if (_pasoActual > 1) {
+  Future<void> _cargarDatosTutorial() async {
+    try {
+      DocumentSnapshot doc;
+      if (widget.tutorialId != null) {
+        doc = await FirebaseFirestore.instance
+            .collection('tutoriales')
+            .doc(widget.tutorialId)
+            .get();
+      } else {
+        // Carga el último tutorial creado para la demo
+        QuerySnapshot query = await FirebaseFirestore.instance
+            .collection('tutoriales')
+            .orderBy('fecha_creacion', descending: true)
+            .limit(1)
+            .get();
+        doc = query.docs.first;
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
       setState(() {
-        _pasoActual--;
+        _tituloTutorial = data['titulo'] ?? "Tutorial FixAR";
+        _pasosCargados = data['pasos'] ?? [];
+        _cargando = false;
+      });
+    } catch (e) {
+      setState(() {
+        _cargando = false;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_cargando)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
+    final pasoData = _pasosCargados[_pasoActualIndex];
+
     return Scaffold(
-      backgroundColor: Colors.black, // Simula la vista de la cámara
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 1. Botón para salir (Arriba a la izquierda)
           Positioned(
-            top: 40,
+            top: 50,
             left: 20,
-            child: CircleAvatar(
-              backgroundColor: Colors.white.withOpacity(0.8),
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.black),
-                onPressed: () => Navigator.pop(context),
+            right: 20,
+            child: Text(
+              _tituloTutorial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
-
-          // 2. Modelo 3D Simulado (En el centro)
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.view_in_ar, // Ícono de Cubo RA
-                  color: Colors.blueAccent.withOpacity(0.7),
-                  size: 150,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Modelo 3D del Paso $_pasoActual',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+            child: Icon(
+              Icons.view_in_ar,
+              color: Colors.blue.withOpacity(0.5),
+              size: 120,
             ),
           ),
-
-          // 3. Tarjeta Inferior de Instrucciones y Navegación
           Positioned(
             bottom: 30,
             left: 20,
@@ -88,90 +91,31 @@ class _TutorialExecutionScreenState extends State<TutorialExecutionScreen> {
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95),
+                color: Colors.white.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black54,
-                    blurRadius: 10,
-                    offset: Offset(0, 5),
-                  ),
-                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título del paso
                   Text(
-                    'Paso $_pasoActual de $_totalPasos',
+                    'Paso ${_pasoActualIndex + 1} de ${_pasosCargados.length}',
                     style: const TextStyle(
-                      color: Color(0xFF007AFF), // Azul
+                      color: Colors.blue,
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 8),
-
-                  // Instrucción textual (cambia según el paso)
+                  const SizedBox(height: 10),
                   Text(
-                    _pasoActual == 1
-                        ? 'Toma la herramienta adecuada y acércala a la pieza marcada en azul.'
-                        : 'Gira la pieza en el sentido de las manecillas del reloj hasta que escuches un clic.',
+                    pasoData['instruccion'],
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-
-                  // Botones de Navegación (Anterior / Siguiente)
-                  Row(
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Botón Anterior
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade300,
-                          foregroundColor: Colors.black87,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        onPressed: _pasoAnterior,
-                        icon: const Icon(Icons.arrow_back_ios, size: 16),
-                        label: const Text('Anterior'),
-                      ),
-
-                      // Botón Siguiente / Finalizar
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF007AFF),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        onPressed: _siguientePaso,
-                        child: Row(
-                          children: [
-                            Text(
-                              _pasoActual == _totalPasos
-                                  ? 'Finalizar'
-                                  : 'Siguiente',
-                            ),
-                            const SizedBox(width: 5),
-                            Icon(
-                              _pasoActual == _totalPasos
-                                  ? Icons.check
-                                  : Icons.arrow_forward_ios,
-                              size: 16,
-                            ),
-                          ],
-                        ),
-                      ),
+                      // Lógica de botones Anterior/Siguiente...
                     ],
                   ),
                 ],
