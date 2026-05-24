@@ -1,7 +1,8 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditorScreen extends StatefulWidget {
@@ -12,10 +13,8 @@ class EditorScreen extends StatefulWidget {
 }
 
 class _EditorScreenState extends State<EditorScreen> {
-  // Lista para acumular los pasos genéricos del tutorial
   final List<Map<String, dynamic>> _pasosTutorial = [];
 
-  // Variables temporales para el paso en edición
   String? _nombreArchivoTemporal;
   String? _urlModeloTemporal;
   bool _subiendoArchivo = false;
@@ -24,8 +23,9 @@ class _EditorScreenState extends State<EditorScreen> {
   final TextEditingController _instruccionController = TextEditingController();
   final TextEditingController _tituloTutorialController =
       TextEditingController();
+  // NUEVO: Controlador para la duración manual
+  final TextEditingController _duracionController = TextEditingController();
 
-  // Selecciona y sube el archivo .GLB a Firebase Storage
   Future<void> _seleccionarYSubirModelo() async {
     FilePickerResult? resultado = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -40,24 +40,41 @@ class _EditorScreenState extends State<EditorScreen> {
 
       try {
         File archivo = File(resultado.files.single.path!);
-        String rutaStorage =
-            'activos_tutoriales/${DateTime.now().millisecondsSinceEpoch}_$_nombreArchivoTemporal';
-        Reference ref = FirebaseStorage.instance.ref().child(rutaStorage);
 
-        await ref.putFile(archivo);
-        String url = await ref.getDownloadURL();
+        // --- CONFIGURACIÓN CLOUDINARY ---
+        var uri = Uri.parse(
+          'https://api.cloudinary.com/v1_1/dusv1zfik/raw/upload',
+        );
+        var peticion = http.MultipartRequest('POST', uri);
 
-        setState(() {
-          _urlModeloTemporal = url;
-          _subiendoArchivo = false;
-        });
+        peticion.fields['upload_preset'] = 'fixar_modelos';
+        peticion.files.add(
+          await http.MultipartFile.fromPath('file', archivo.path),
+        );
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Activo 3D subido correctamente'),
-              backgroundColor: Color(0xFF007AFF), // Azul principal FixAR
-            ),
+        var respuesta = await peticion.send();
+
+        if (respuesta.statusCode == 200) {
+          var datosRespuesta = await respuesta.stream.bytesToString();
+          var jsonMap = json.decode(datosRespuesta);
+          String urlSegura = jsonMap['secure_url'];
+
+          setState(() {
+            _urlModeloTemporal = urlSegura;
+            _subiendoArchivo = false;
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Activo 3D subido a la nube correctamente'),
+                backgroundColor: Color(0xFF007AFF),
+              ),
+            );
+          }
+        } else {
+          throw Exception(
+            'Error del servidor de imágenes: ${respuesta.statusCode}',
           );
         }
       } catch (e) {
@@ -76,15 +93,12 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
-  // Consolida el paso actual en la lista local
   void _agregarPasoLocal() {
     if (_urlModeloTemporal == null ||
         _instruccionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Sube un modelo 3D y escribe la instrucción para este paso',
-          ),
+          content: Text('Sube un modelo 3D y escribe la instrucción'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -98,7 +112,6 @@ class _EditorScreenState extends State<EditorScreen> {
         'modelo_url': _urlModeloTemporal,
       });
 
-      // Limpiamos los campos para el siguiente paso
       _instruccionController.clear();
       _urlModeloTemporal = null;
       _nombreArchivoTemporal = null;
@@ -106,21 +119,20 @@ class _EditorScreenState extends State<EditorScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Paso ${_pasosTutorial.length} guardado. Listo para el siguiente.',
-        ),
-        backgroundColor: const Color(0xFF34C759), // Verde confirmación
+        content: Text('Paso ${_pasosTutorial.length} guardado.'),
+        backgroundColor: const Color(0xFF34C759),
       ),
     );
   }
 
-  // Sube el tutorial completo a Firestore
   Future<void> _finalizarYGuardarTutorial() async {
+    // NUEVO: Validamos que también haya escrito la duración
     if (_pasosTutorial.isEmpty ||
-        _tituloTutorialController.text.trim().isEmpty) {
+        _tituloTutorialController.text.trim().isEmpty ||
+        _duracionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Ingresa el título y configura al menos un paso'),
+          content: Text('Completa título, duración y al menos un paso'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -134,7 +146,8 @@ class _EditorScreenState extends State<EditorScreen> {
     try {
       await FirebaseFirestore.instance.collection('tutoriales').add({
         'titulo': _tituloTutorialController.text.trim(),
-        'duracion': '${_pasosTutorial.length * 2} Minutos',
+        'duracion': _duracionController.text
+            .trim(), // NUEVO: Toma el texto que escribiste
         'fecha_creacion': FieldValue.serverTimestamp(),
         'total_pasos': _pasosTutorial.length,
         'pasos': _pasosTutorial,
@@ -144,10 +157,10 @@ class _EditorScreenState extends State<EditorScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('¡Tutorial publicado exitosamente!'),
-            backgroundColor: Color(0xFF34C759), // Verde FixAR
+            backgroundColor: Color(0xFF34C759),
           ),
         );
-        Navigator.pop(context); // Regresa al Home
+        Navigator.pop(context);
       }
     } catch (e) {
       setState(() {
@@ -156,7 +169,7 @@ class _EditorScreenState extends State<EditorScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al publicar: $e'),
+            content: Text('Error de base de datos: $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -168,13 +181,14 @@ class _EditorScreenState extends State<EditorScreen> {
   void dispose() {
     _instruccionController.dispose();
     _tituloTutorialController.dispose();
+    _duracionController.dispose(); // NUEVO: Limpiar memoria
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6), // Fondo idéntico al Home
+      backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -184,7 +198,7 @@ class _EditorScreenState extends State<EditorScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'FixAR',
+          'Creador FixAR',
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -197,7 +211,6 @@ class _EditorScreenState extends State<EditorScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Entrada de Título Genérico
             TextField(
               controller: _tituloTutorialController,
               decoration: InputDecoration(
@@ -220,7 +233,29 @@ class _EditorScreenState extends State<EditorScreen> {
             ),
             const SizedBox(height: 15),
 
-            // Indicador de pasos configurados (Estilo Azul Home)
+            // NUEVO: Campo de texto para la Duración
+            TextField(
+              controller: _duracionController,
+              decoration: InputDecoration(
+                labelText: 'Duración Estimada (Ej. 10 Minutos, 1 Hora)',
+                labelStyle: const TextStyle(color: Color(0xFF007AFF)),
+                filled: true,
+                fillColor: Colors.white,
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF007AFF),
+                    width: 2,
+                  ),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 15),
+
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
               decoration: BoxDecoration(
@@ -237,7 +272,6 @@ class _EditorScreenState extends State<EditorScreen> {
             ),
             const SizedBox(height: 15),
 
-            // Tarjeta central de configuración del paso actual
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -265,12 +299,11 @@ class _EditorScreenState extends State<EditorScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // Botón de Carga de Archivo (Azul Principal FixAR)
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF007AFF), // Azul FixAR
+                        backgroundColor: const Color(0xFF007AFF),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
@@ -304,11 +337,6 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Peso Máximo: 50MB',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
                   const SizedBox(height: 15),
 
                   const Text(
@@ -334,11 +362,10 @@ class _EditorScreenState extends State<EditorScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Botón para Confirmar Paso (Verde iOS / FixAR)
                   Center(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF34C759), // Verde FixAR
+                        backgroundColor: const Color(0xFF34C759),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
@@ -359,25 +386,16 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  const Center(
-                    child: Text(
-                      'Guarda el paso actual en la secuencia\ny limpia para el siguiente',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ),
                 ],
               ),
             ),
             const SizedBox(height: 30),
 
-            // Botón de Publicación Final (Azul Principal)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF007AFF), // Azul FixAR
+                  backgroundColor: const Color(0xFF007AFF),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(

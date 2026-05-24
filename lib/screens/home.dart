@@ -1,35 +1,44 @@
 import 'package:flutter/material.dart';
 import 'editor.dart';
 import 'ar_calibracion.dart';
-import 'perfil.dart'; // Importamos la nueva pantalla
-import 'login.dart'; // Importamos el login para poder cerrar sesión
+import 'perfil.dart';
+import 'login.dart';
 import 'mis_modelos.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fix_ar/screens/tutorial.dart';
 
-class Home extends StatelessWidget {
+// 1. Cambiamos de StatelessWidget a StatefulWidget para manejar el texto de búsqueda
+class Home extends StatefulWidget {
   const Home({super.key});
+
+  @override
+  State<Home> createState() => _HomeState();
+}
+
+class _HomeState extends State<Home> {
+  // 2. Variable para guardar lo que el usuario escribe
+  String _textoBusqueda = '';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
 
-      // --- MAGIA 1: EL MENÚ LATERAL (DRAWER) ---
+      // --- EL MENÚ LATERAL (DRAWER) ---
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            // Cabecera del menú
-            // Opciones del menú
             ListTile(
               leading: const Icon(Icons.home, color: Colors.black87),
               title: const Text('Inicio'),
-              onTap: () => Navigator.pop(context), // Cierra el menú
+              onTap: () => Navigator.pop(context),
             ),
             ListTile(
               leading: const Icon(Icons.view_in_ar, color: Colors.black87),
               title: const Text('Mis Modelos 3D'),
               onTap: () {
-                Navigator.pop(context); // Cierra el menú lateral
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const MisModelos()),
@@ -41,7 +50,7 @@ class Home extends StatelessWidget {
               title: const Text('Configuración'),
               onTap: () {},
             ),
-            const Divider(), // Línea separadora
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text(
@@ -49,7 +58,6 @@ class Home extends StatelessWidget {
                 style: TextStyle(color: Colors.red),
               ),
               onTap: () {
-                // Navega de regreso al Login y borra el historial de pantallas
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const Login()),
@@ -62,26 +70,21 @@ class Home extends StatelessWidget {
       ),
 
       // Barra superior
-      // Barra superior
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-
-        // --- AQUÍ QUITAMOS EL MENSAJE GRIS ---
         leading: Builder(
           builder: (BuildContext context) {
             return IconButton(
               icon: const Icon(Icons.menu, color: Colors.black),
-              tooltip: '', // Al dejar esto vacío, ya no sale el cuadro gris
+              tooltip: '',
               onPressed: () {
-                Scaffold.of(context).openDrawer(); // Esto abre el menú lateral
+                Scaffold.of(context).openDrawer();
               },
             );
           },
         ),
-
-        // ------------------------------------
         title: const Text(
           'FixAR',
           style: TextStyle(
@@ -97,7 +100,6 @@ class Home extends StatelessWidget {
               color: Colors.black,
               size: 28,
             ),
-            // Le quitamos también el tooltip al botón de perfil por si acaso
             tooltip: '',
             onPressed: () {
               Navigator.push(
@@ -109,12 +111,18 @@ class Home extends StatelessWidget {
         ],
       ),
 
-      // ... EL RESTO DEL CÓDIGO DEL BODY SE QUEDA EXACTAMENTE IGUAL ...
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // 3. El buscador ahora actualiza el estado cada vez que escribes
             TextField(
+              onChanged: (valor) {
+                setState(() {
+                  _textoBusqueda = valor
+                      .toLowerCase(); // Convertimos a minúsculas para una búsqueda más fácil
+                });
+              },
               decoration: InputDecoration(
                 hintText: 'Buscar Tutoriales',
                 hintStyle: const TextStyle(color: Colors.grey),
@@ -136,23 +144,94 @@ class Home extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
+
+            // --- FEED DINÁMICO CON FILTRADO ---
             Expanded(
-              child: ListView(
-                children: [
-                  _buildTutorialCard(
-                    context: context,
-                    title: 'Cambio de Foco',
-                    duration: '5 Minutos',
-                    iconData: Icons.lightbulb_outline,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildTutorialCard(
-                    context: context,
-                    title: 'Cubo Rubik 3x3 (Cruz Blanca)',
-                    duration: '5 Minutos',
-                    iconData: Icons.grid_on,
-                  ),
-                ],
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('tutoriales')
+                    .orderBy('fecha_creacion', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF0056B3),
+                      ),
+                    );
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Aún no hay tutoriales.\n¡Sube el primero!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black54, fontSize: 16),
+                      ),
+                    );
+                  }
+
+                  // 4. Lógica de Filtrado Local
+                  final tutorialesRaw = snapshot.data!.docs;
+
+                  // Filtramos la lista basándonos en lo que escribiste en el buscador
+                  final tutorialesFiltrados = tutorialesRaw.where((doc) {
+                    final datos = doc.data() as Map<String, dynamic>;
+                    final titulo = (datos['titulo'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    return titulo.contains(_textoBusqueda);
+                  }).toList();
+
+                  // Si buscaste algo que no existe
+                  if (tutorialesFiltrados.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No se encontraron resultados para "$_textoBusqueda"',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 16,
+                        ),
+                      ),
+                    );
+                  }
+
+                  // Dibujamos solo los tutoriales que pasaron el filtro
+                  return ListView.builder(
+                    itemCount: tutorialesFiltrados.length,
+                    itemBuilder: (context, index) {
+                      final datos =
+                          tutorialesFiltrados[index].data()
+                              as Map<String, dynamic>;
+                      final idDocumento = tutorialesFiltrados[index].id;
+
+                      final titulo = datos['titulo'] ?? 'Tutorial FixAR';
+                      final duracion =
+                          datos['duracion'] ?? 'Tiempo desconocido';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20.0),
+                        child: _buildTutorialCard(
+                          context: context,
+                          title: titulo,
+                          duration: duracion,
+                          iconData: Icons.view_in_ar,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TutorialExecutionScreen(
+                                  tutorialId: idDocumento,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -182,8 +261,10 @@ class Home extends StatelessWidget {
     required String title,
     required String duration,
     required IconData iconData,
+    required VoidCallback onTap,
   }) {
     return GestureDetector(
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),

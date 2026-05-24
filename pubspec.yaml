@@ -37,6 +37,9 @@ dependencies:
   file_picker: ^8.1.7         # Para que el usuario seleccione archivos .GLB
   cupertino_icons: ^1.0.8
   google_fonts: ^8.0.2
+  http: ^1.6.0
+  firebase_auth: ^5.7.0
+  google_sign_in: ^6.2.1  
   
 dev_dependencies:
   flutter_test:
