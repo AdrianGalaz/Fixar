@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 
 class TutorialExecutionScreen extends StatefulWidget {
   final String tutorialId;
@@ -44,6 +45,16 @@ class _TutorialExecutionScreenState extends State<TutorialExecutionScreen> {
           final datos = snapshot.data!.data() as Map<String, dynamic>;
           final String titulo = datos['titulo'] ?? 'Tutorial';
           final List<dynamic> pasos = datos['pasos'] ?? [];
+
+          // --- PING DE ANALYTICS ---
+          // Registramos silenciosamente que este usuario abrió este modelo
+          FirebaseAnalytics.instance.logEvent(
+            name: 'tutorial_iniciado',
+            parameters: {
+              'nombre_tutorial': titulo,
+              'cantidad_pasos': pasos.length,
+            },
+          );
 
           if (pasos.isEmpty) {
             return _pantallaError(

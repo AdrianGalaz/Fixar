@@ -3,8 +3,7 @@ import 'tutorial.dart';
 
 class ar_calibracion extends StatelessWidget {
   final String imagePath;
-  final String
-  tutorialId; // <--- 1. Agregamos el ID que necesita la siguiente pantalla
+  final String tutorialId;
 
   // 2. Lo pedimos como obligatorio
   const ar_calibracion({

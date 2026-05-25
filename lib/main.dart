@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // Importamos Google Fonts
-import 'screens/login.dart'; // Importamos tu pantalla de Login
+import 'package:google_fonts/google_fonts.dart';
+import 'screens/login.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+// THM
+import 'package:firebase_analytics/firebase_analytics.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 2. AGREGAMOS EL PARÁMETRO 'options' DENTRO DE LOS PARÉNTESIS
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Registramos que alguien abrió la app
+  FirebaseAnalytics.instance.logAppOpen();
   runApp(const FixARApp());
 }
 
