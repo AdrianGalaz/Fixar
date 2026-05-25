@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 class TutorialExecutionScreen extends StatefulWidget {
-  final String? tutorialId;
-  const TutorialExecutionScreen({super.key, this.tutorialId});
+  final String tutorialId;
+
+  const TutorialExecutionScreen({super.key, required this.tutorialId});
 
   @override
   State<TutorialExecutionScreen> createState() =>
@@ -11,118 +13,255 @@ class TutorialExecutionScreen extends StatefulWidget {
 }
 
 class _TutorialExecutionScreenState extends State<TutorialExecutionScreen> {
-  int _pasoActualIndex = 0;
-  List<dynamic> _pasosCargados = [];
-  bool _cargando = true;
-  String _tituloTutorial = "";
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarDatosTutorial();
-  }
-
-  Future<void> _cargarDatosTutorial() async {
-    try {
-      DocumentSnapshot doc;
-      if (widget.tutorialId != null) {
-        doc = await FirebaseFirestore.instance
-            .collection('tutoriales')
-            .doc(widget.tutorialId)
-            .get();
-      } else {
-        // Carga el último tutorial creado para la demo
-        QuerySnapshot query = await FirebaseFirestore.instance
-            .collection('tutoriales')
-            .orderBy('fecha_creacion', descending: true)
-            .limit(1)
-            .get();
-        doc = query.docs.first;
-      }
-
-      final data = doc.data() as Map<String, dynamic>;
-      setState(() {
-        _tituloTutorial = data['titulo'] ?? "Tutorial FixAR";
-        _pasosCargados = data['pasos'] ?? [];
-        _cargando = false;
-      });
-    } catch (e) {
-      setState(() {
-        _cargando = false;
-      });
-    }
-  }
+  int _pasoActual = 0;
 
   @override
   Widget build(BuildContext context) {
-    if (_cargando)
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-
-    final pasoData = _pasosCargados[_pasoActualIndex];
-
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned(
-            top: 50,
-            left: 20,
-            right: 20,
-            child: Text(
-              _tituloTutorial,
-              style: const TextStyle(
+      backgroundColor: const Color(0xFFF3F4F6),
+
+      // 1. Nos conectamos a Firestore para traer el tutorial específico
+      body: FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance
+            .collection('tutoriales')
+            .doc(widget.tutorialId)
+            .get(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF007AFF)),
+            );
+          }
+
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return _pantallaError(
+              context,
+              'El tutorial no existe o fue eliminado.',
+            );
+          }
+
+          // 2. Extraemos la información del documento
+          final datos = snapshot.data!.data() as Map<String, dynamic>;
+          final String titulo = datos['titulo'] ?? 'Tutorial';
+          final List<dynamic> pasos = datos['pasos'] ?? [];
+
+          if (pasos.isEmpty) {
+            return _pantallaError(
+              context,
+              'Este tutorial no tiene pasos configurados.',
+            );
+          }
+
+          // Obtenemos los datos exactos del paso en el que vamos
+          final pasoDatos = pasos[_pasoActual] as Map<String, dynamic>;
+          final String urlModelo = pasoDatos['modelo_url'] ?? '';
+          final String instruccion =
+              pasoDatos['instruccion'] ?? 'Sin instrucciones.';
+
+          return Column(
+            children: [
+              // AppBar personalizado
+              Container(
+                padding: const EdgeInsets.only(
+                  top: 50,
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                ),
                 color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Center(
-            child: Icon(
-              Icons.view_in_ar,
-              color: Colors.blue.withOpacity(0.5),
-              size: 120,
-            ),
-          ),
-          Positioned(
-            bottom: 30,
-            left: 20,
-            right: 20,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Paso ${_pasoActualIndex + 1} de ${_pasosCargados.length}',
-                    style: const TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios,
+                        color: Colors.black87,
+                      ),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    pasoData['instruccion'],
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
+                    Expanded(
+                      child: Text(
+                        titulo,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
                     ),
-                  ),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Lógica de botones Anterior/Siguiente...
+                    const SizedBox(width: 40), // Balance visual
+                  ],
+                ),
+              ),
+
+              // --- ÁREA DEL VISUALIZADOR 3D / AR ---
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black12, blurRadius: 10),
                     ],
                   ),
-                ],
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: urlModelo.isNotEmpty
+                        ? ModelViewer(
+                            backgroundColor: const Color(0xFFFFFFFF),
+                            src: urlModelo,
+                            alt: "Modelo 3D del paso",
+                            ar: true, // ¡ESTO ACTIVA LA CÁMARA NATIVA DE GOOGLE!
+                            arModes: const [
+                              'scene-viewer',
+                              'webxr',
+                              'quick-look',
+                            ],
+                            autoRotate: true,
+                            cameraControls: true,
+                          )
+                        : const Center(
+                            child: Text(
+                              'No hay modelo 3D para este paso',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+
+              // --- ÁREA DE INSTRUCCIONES Y NAVEGACIÓN ---
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Paso ${_pasoActual + 1} de ${pasos.length}',
+                      style: const TextStyle(
+                        color: Color(0xFF007AFF),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      instruccion,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.black87,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+
+                    // Botones Anterior / Siguiente
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey.shade200,
+                            foregroundColor: Colors.black87,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                          onPressed: _pasoActual > 0
+                              ? () => setState(() {
+                                  _pasoActual--;
+                                })
+                              : null, // Se deshabilita si es el primer paso
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text(
+                            'Anterior',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF007AFF),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                          onPressed: _pasoActual < pasos.length - 1
+                              ? () => setState(() {
+                                  _pasoActual++;
+                                })
+                              : () => Navigator.pop(
+                                  context,
+                                ), // Sale si es el último paso
+                          child: Row(
+                            children: [
+                              Text(
+                                _pasoActual < pasos.length - 1
+                                    ? 'Siguiente'
+                                    : 'Finalizar',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                _pasoActual < pasos.length - 1
+                                    ? Icons.arrow_forward
+                                    : Icons.check,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Pequeño widget para manejar errores de base de datos
+  Widget _pantallaError(BuildContext context, String mensaje) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: Center(
+        child: Text(
+          mensaje,
+          style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+        ),
       ),
     );
   }

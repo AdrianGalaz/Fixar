@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'tutorial.dart';
 
 class ar_calibracion extends StatelessWidget {
-  // Recibimos la ruta de la imagen desde la pantalla anterior
   final String imagePath;
+  final String
+  tutorialId; // <--- 1. Agregamos el ID que necesita la siguiente pantalla
 
-  const ar_calibracion({super.key, required this.imagePath});
+  // 2. Lo pedimos como obligatorio
+  const ar_calibracion({
+    super.key,
+    required this.imagePath,
+    required this.tutorialId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +91,7 @@ class ar_calibracion extends StatelessWidget {
             bottom: 40,
             left: 20,
             child: Hero(
-              tag: imagePath, // El "tag" conecta esta imagen con la del Home
+              tag: imagePath,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.asset(
@@ -102,8 +108,7 @@ class ar_calibracion extends StatelessWidget {
           // Botón Comprobar
           Positioned(
             bottom: 40,
-            left:
-                100, // Lo movimos un poco a la derecha para dejar espacio a la foto
+            left: 100,
             right: 20,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -118,7 +123,9 @@ class ar_calibracion extends StatelessWidget {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const TutorialExecutionScreen(),
+                    // 3. ¡AQUÍ ESTÁ LA SOLUCIÓN! Le pasamos el ID a la pantalla del tutorial
+                    builder: (context) =>
+                        TutorialExecutionScreen(tutorialId: tutorialId),
                   ),
                 );
               },
