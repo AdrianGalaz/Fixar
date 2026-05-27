@@ -8,6 +8,9 @@
     
     <queries>
         <package android:name="com.google.ar.core" />
+        
+        <package android:name="com.google.android.googlequicksearchbox" />
+        
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="intent" />
@@ -16,7 +19,6 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
-        
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
@@ -49,5 +51,8 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+            
+        <meta-data android:name="com.google.ar.core" android:value="optional" />
+        
     </application>
 </manifest>
