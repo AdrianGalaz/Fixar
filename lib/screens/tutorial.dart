@@ -123,12 +123,8 @@ class _TutorialExecutionScreenState extends State<TutorialExecutionScreen> {
                             backgroundColor: const Color(0xFFFFFFFF),
                             src: urlModelo,
                             alt: "Modelo 3D del paso",
-                            ar: true, // ¡ESTO ACTIVA LA CÁMARA NATIVA DE GOOGLE!
-                            arModes: const [
-                              'scene-viewer',
-                              'webxr',
-                              'quick-look',
-                            ],
+                            ar: true,
+                            arModes: const ['scene-viewer', 'quick-look'],
                             autoRotate: true,
                             cameraControls: true,
                           )
