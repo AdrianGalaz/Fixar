@@ -27,12 +27,26 @@ class _EditorScreenState extends State<EditorScreen> {
   final TextEditingController _duracionController = TextEditingController();
 
   Future<void> _seleccionarYSubirModelo() async {
+    // 1. CAMBIO CLAVE: Pedimos cualquier archivo (FileType.any) para que Android no colapse
     FilePickerResult? resultado = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['glb'],
+      type: FileType.any,
     );
 
     if (resultado != null && resultado.files.single.path != null) {
+      // 2. NUEVO: Validamos manualmente que el archivo termine en .glb o .gltf
+      String nombreArchivo = resultado.files.single.name.toLowerCase();
+      if (!nombreArchivo.endsWith('.glb') && !nombreArchivo.endsWith('.gltf')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Formato inválido. Por favor selecciona un modelo 3D (.glb)',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return; // Detenemos la función si no es un modelo
+      }
+
       setState(() {
         _subiendoArchivo = true;
         _nombreArchivoTemporal = resultado.files.single.name;
